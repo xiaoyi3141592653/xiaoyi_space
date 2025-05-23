@@ -1,0 +1,11 @@
+#!/bin/sh
+which python
+check_python_ret=$?
+if [ ${check_python_ret} -eq 0 ];
+then
+python_cmd=python
+else
+python_cmd=python3
+fi
+
+${python_cmd} script/hooks/pre-commit.py
