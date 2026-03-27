@@ -208,6 +208,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Scroll sidebar to active item
+  var activeItem = document.querySelector('.nav-list .nav-item.active');
+  if (activeItem) {
+    activeItem.scrollIntoView({ block: 'center', behavior: 'instant' });
+  }
+
   // Close search on Escape
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
