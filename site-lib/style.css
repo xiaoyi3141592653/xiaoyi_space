@@ -453,12 +453,14 @@ img {
 .embed-image { text-align: center; margin: 1em 0; }
 
 /* Video */
-.embed-video { text-align: center; margin: 1em 0; }
-.embed-video video {
+.markdown-body video {
   max-width: 100%;
+  width: 100%;
+  height: auto;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
+.embed-video { text-align: center; margin: 1em 0; }
 
 /* Embed note */
 .embed-note {
