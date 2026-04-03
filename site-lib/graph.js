@@ -105,6 +105,33 @@
     return getNodeRadius(d) + 1.8;
   }
 
+  function getNodeId(v) {
+    return (v && typeof v === 'object') ? v.id : v;
+  }
+
+  function collectTwoHopIds() {
+    var neighbors = new Set();
+    var twoHop = new Set();
+
+    links.forEach(function (l) {
+      var src = getNodeId(l.source);
+      var tgt = getNodeId(l.target);
+      if (src === currentNote) neighbors.add(tgt);
+      if (tgt === currentNote) neighbors.add(src);
+    });
+
+    links.forEach(function (l) {
+      var src = getNodeId(l.source);
+      var tgt = getNodeId(l.target);
+      if (neighbors.has(src) && tgt !== currentNote) twoHop.add(tgt);
+      if (neighbors.has(tgt) && src !== currentNote) twoHop.add(src);
+    });
+
+    neighbors.forEach(function (id) { twoHop.add(id); });
+    twoHop.add(currentNote);
+    return twoHop;
+  }
+
   function getLabelBox(d) {
     var r = getNodeRadius(d);
     var labelOffset = 10;
@@ -233,50 +260,47 @@
     var w = container.getBoundingClientRect().width || width;
     var h = container.getBoundingClientRect().height || height;
 
-    // Fit all nodes + labels so both circles and titles are visible.
-    var focusNodes = nodes.filter(function (n) {
-      return n.x != null && n.y != null;
-    });
-    if (focusNodes.length === 0) focusNodes = [target];
+    // Priority: current note circle + full title must be visible, then try to include two-hop nodes.
+    var currentBox = getLabelBox(target);
+    var titlePadX = Math.max(20, w * 0.05);
+    var titlePadY = Math.max(16, h * 0.06);
+    var titleLeft = currentBox.left - titlePadX;
+    var titleRight = currentBox.right + titlePadX;
+    var titleTop = currentBox.top - titlePadY;
+    var titleBottom = currentBox.bottom + titlePadY;
 
-    var left = Infinity;
-    var right = -Infinity;
-    var top = Infinity;
-    var bottom = -Infinity;
-    focusNodes.forEach(function (n) {
-      if (n.x == null || n.y == null) return;
-      var box = getLabelBox(n);
-      left = Math.min(left, box.left);
-      right = Math.max(right, box.right);
-      top = Math.min(top, box.top);
-      bottom = Math.max(bottom, box.bottom);
+    var titleBoxW = Math.max(1, titleRight - titleLeft);
+    var titleBoxH = Math.max(1, titleBottom - titleTop);
+    var titleFitScale = Math.min(w / titleBoxW, h / titleBoxH);
+
+    // A little larger than "full fit" feel, while keeping current title fully visible.
+    var scale = Math.min(2.35, Math.max(0.35, titleFitScale * 0.98));
+
+    var twoHopIds = collectTwoHopIds();
+    var twoHopNodes = nodes.filter(function (n) {
+      return twoHopIds.has(n.id) && n.x != null && n.y != null;
     });
 
-    if (!isFinite(left) || !isFinite(right)) {
-      var fallback = getLabelBox(target);
-      left = fallback.left;
-      right = fallback.right;
-      top = fallback.top;
-      bottom = fallback.bottom;
+    var avgY = target.y;
+    if (twoHopNodes.length > 0) {
+      var sumY = 0;
+      twoHopNodes.forEach(function (n) { sumY += n.y; });
+      avgY = sumY / twoHopNodes.length;
     }
 
-    var padX = Math.max(28, w * 0.1);
-    var padY = Math.max(24, h * 0.1);
-    left -= padX;
-    right += padX;
-    top -= padY;
-    bottom += padY;
+    // Bias current node to the left so the right-side title has more room.
+    var desiredX = w * 0.30;
+    var desiredY = h * 0.5 + (target.y - avgY) * scale * 0.18;
+    var tx = desiredX - target.x * scale;
+    var ty = desiredY - target.y * scale;
 
-    var boxW = Math.max(1, right - left);
-    var boxH = Math.max(1, bottom - top);
-    var scaleX = w / boxW;
-    var scaleY = h / boxH;
-    var scale = Math.min(1.8, Math.max(0.2, Math.min(scaleX, scaleY) * 0.96));
-
-    var cx = (left + right) / 2;
-    var cy = (top + bottom) / 2;
-    var tx = w / 2 - cx * scale;
-    var ty = h / 2 - cy * scale;
+    // Clamp translation to guarantee the current title box stays fully inside viewport.
+    var minTx = w - titleRight * scale;
+    var maxTx = -titleLeft * scale;
+    var minTy = h - titleBottom * scale;
+    var maxTy = -titleTop * scale;
+    tx = Math.min(maxTx, Math.max(minTx, tx));
+    ty = Math.min(maxTy, Math.max(minTy, ty));
 
     hasCentered = true;
 
