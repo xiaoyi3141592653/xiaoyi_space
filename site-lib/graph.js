@@ -105,6 +105,18 @@
     return getNodeRadius(d) + 1.8;
   }
 
+  function getLabelBox(d) {
+    var r = getNodeRadius(d);
+    var labelOffset = 10;
+    var labelWidth = d._labelWidth || (String(d.id).length * 7);
+    return {
+      left: d.x - r - 8,
+      right: d.x + labelOffset + labelWidth + 8,
+      top: d.y - 14,
+      bottom: d.y + 12
+    };
+  }
+
   // Nodes
   var node = g.append('g')
     .attr('class', 'graph-nodes')
@@ -223,22 +235,45 @@
     var w = container.getBoundingClientRect().width || width;
     var h = container.getBoundingClientRect().height || height;
 
-    // Keep current node and its title visible by fitting a padded box.
-    var r = getNodeRadius(target);
-    var labelOffset = 10;
-    var labelWidth = target._labelWidth || (String(target.id).length * 7);
-    var pad = 16;
+    // Fit current node + one-hop neighbors so labels are less likely to be clipped.
+    var focusNodes = nodes.filter(function (n) {
+      return n.id === currentNote || connectedSet.has(n.id);
+    });
+    if (focusNodes.length === 0) focusNodes = [target];
 
-    var left = target.x - r - pad;
-    var right = target.x + labelOffset + labelWidth + pad;
-    var top = target.y - 14 - pad;
-    var bottom = target.y + 12 + pad;
+    var left = Infinity;
+    var right = -Infinity;
+    var top = Infinity;
+    var bottom = -Infinity;
+    focusNodes.forEach(function (n) {
+      if (n.x == null || n.y == null) return;
+      var box = getLabelBox(n);
+      left = Math.min(left, box.left);
+      right = Math.max(right, box.right);
+      top = Math.min(top, box.top);
+      bottom = Math.max(bottom, box.bottom);
+    });
+
+    if (!isFinite(left) || !isFinite(right)) {
+      var fallback = getLabelBox(target);
+      left = fallback.left;
+      right = fallback.right;
+      top = fallback.top;
+      bottom = fallback.bottom;
+    }
+
+    var padX = Math.max(24, w * 0.08);
+    var padY = Math.max(20, h * 0.08);
+    left -= padX;
+    right += padX;
+    top -= padY;
+    bottom += padY;
 
     var boxW = Math.max(1, right - left);
     var boxH = Math.max(1, bottom - top);
     var scaleX = w / boxW;
     var scaleY = h / boxH;
-    var scale = Math.min(2.2, Math.max(1, Math.min(scaleX, scaleY) * 0.92));
+    var scale = Math.min(2.0, Math.max(0.55, Math.min(scaleX, scaleY)));
 
     var cx = (left + right) / 2;
     var cy = (top + bottom) / 2;
