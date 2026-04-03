@@ -46,8 +46,12 @@
   var g = svg.append('g');
 
   // Zoom
+  var userAdjustedView = false;
   var zoom = d3.zoom()
     .scaleExtent([0.2, 5])
+    .on('start', function (event) {
+      if (event.sourceEvent) userAdjustedView = true;
+    })
     .on('zoom', function (event) {
       g.attr('transform', event.transform);
     });
@@ -277,13 +281,18 @@
   });
 
   // Center on current note after simulation settles
-  simulation.on('end', centerOnCurrent);
-  // Also center after a short delay in case simulation is slow
-  setTimeout(centerOnCurrent, 800);
+  simulation.on('end', function () {
+    centerOnCurrent(true);
+  });
+  // Preview once during layout, but only lock after the simulation settles.
+  setTimeout(function () {
+    centerOnCurrent(false);
+  }, 350);
 
   var hasCentered = false;
-  function centerOnCurrent() {
-    if (hasCentered) return;
+  function centerOnCurrent(lockFocus) {
+    if (hasCentered && lockFocus !== true) return;
+    if (userAdjustedView) return;
     var target = nodes.find(function (n) { return n.id === currentNote; });
     if (!target || target.x == null) return;
     var w = container.getBoundingClientRect().width || width;
@@ -352,10 +361,16 @@
     tx = Math.min(maxTx, Math.max(minTx, tx));
     ty = Math.min(maxTy, Math.max(minTy, ty));
 
-    hasCentered = true;
+    var transform = d3.zoomIdentity.translate(tx, ty).scale(scale);
+    svg.interrupt();
+    if (lockFocus) {
+      hasCentered = true;
+      svg.transition().duration(450)
+        .call(zoom.transform, transform);
+      return;
+    }
 
-    svg.transition().duration(600)
-      .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    svg.call(zoom.transform, transform);
   }
 
   // Drag handlers
@@ -388,7 +403,10 @@
         simulation.force('center', d3.forceCenter(w / 2, h / 2));
         simulation.alpha(0.3).restart();
         hasCentered = false;
-        setTimeout(centerOnCurrent, 300);
+        userAdjustedView = false;
+        setTimeout(function () {
+          centerOnCurrent(false);
+        }, 200);
       }
     }
   });
