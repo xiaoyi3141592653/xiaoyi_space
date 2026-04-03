@@ -11,92 +11,6 @@
   var currentNote = (typeof CURRENT_NOTE !== 'undefined') ? CURRENT_NOTE : '';
   if (!data.nodes || data.nodes.length === 0) return;
 
-  var textMeasureCanvas = document.createElement('canvas');
-  var textMeasureContext = textMeasureCanvas.getContext('2d');
-
-  function getTextWidth(text, fontSize, fontWeight) {
-    textMeasureContext.font = (fontWeight || 400) + ' ' + fontSize + 'px sans-serif';
-    return textMeasureContext.measureText(text).width;
-  }
-
-  function wrapLabel(text, fontSize, fontWeight, maxWidth, maxLines) {
-    if (!text) return [''];
-
-    var chars = Array.from(text);
-    var lines = [];
-    var line = '';
-
-    chars.forEach(function (char) {
-      var next = line + char;
-      if (line && getTextWidth(next, fontSize, fontWeight) > maxWidth) {
-        lines.push(line);
-        line = char;
-      } else {
-        line = next;
-      }
-    });
-
-    if (line) lines.push(line);
-    if (lines.length <= maxLines) return lines;
-
-    var trimmed = lines.slice(0, maxLines);
-    var last = trimmed[maxLines - 1];
-    while (last && getTextWidth(last + '…', fontSize, fontWeight) > maxWidth) {
-      last = last.slice(0, -1);
-    }
-    trimmed[maxLines - 1] = (last || '').replace(/\s+$/, '') + '…';
-    return trimmed;
-  }
-
-  function prepareNodeMetrics(nodes, width, connectedSet) {
-    nodes.forEach(function (node) {
-      var isCurrent = node.id === currentNote;
-      var fontSize = isCurrent ? 15 : (node.isTag ? 12 : 13);
-      var fontWeight = isCurrent ? 700 : (node.isTag ? 600 : 500);
-      var maxLabelWidth = isCurrent
-        ? Math.max(140, Math.min(width * 0.5, 240))
-        : Math.max(90, Math.min(width * 0.36, 160));
-      var lines = wrapLabel(node.id, fontSize, fontWeight, maxLabelWidth, isCurrent ? 3 : 2);
-      var lineHeight = fontSize + 3;
-      var labelWidth = lines.reduce(function (max, line) {
-        return Math.max(max, getTextWidth(line, fontSize, fontWeight));
-      }, 0);
-
-      node.isCurrent = isCurrent;
-      node.isConnected = isCurrent || connectedSet.has(node.id);
-      node.radius = isCurrent ? 9 : (node.isTag ? 6 : 5);
-      node.fontSize = fontSize;
-      node.fontWeight = fontWeight;
-      node.labelLines = lines;
-      node.labelLineHeight = lineHeight;
-      node.labelWidth = labelWidth;
-      node.labelHeight = Math.max(lineHeight, lines.length * lineHeight);
-      node.labelOffsetX = node.radius + 8;
-      node.collisionRadius = Math.max(
-        node.radius + 10,
-        node.labelOffsetX + node.labelWidth * 0.5,
-        node.labelHeight * 0.65 + node.radius
-      );
-    });
-  }
-
-  function getFocusNodes(nodes, connectedSet) {
-    return nodes.filter(function (node) {
-      return node.id === currentNote || connectedSet.has(node.id);
-    });
-  }
-
-  function getFocusBounds(nodes) {
-    return nodes.reduce(function (bounds, node) {
-      var halfHeight = Math.max(node.radius, node.labelHeight / 2);
-      bounds.minX = Math.min(bounds.minX, node.x - node.radius - 18);
-      bounds.maxX = Math.max(bounds.maxX, node.x + node.labelOffsetX + node.labelWidth + 18);
-      bounds.minY = Math.min(bounds.minY, node.y - halfHeight - 18);
-      bounds.maxY = Math.max(bounds.maxY, node.y + halfHeight + 18);
-      return bounds;
-    }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
-  }
-
   // 为每个容器创建独立的图谱
   var ids = ['graph-container', 'graph-container-mobile'];
   ids.forEach(function (containerId) {
@@ -109,7 +23,6 @@
   });
 
   function renderGraph(container) {
-  container.innerHTML = '';
 
   // 找出与当前笔记直接相连的节点
   var connectedSet = new Set();
@@ -134,7 +47,7 @@
 
   // Zoom
   var zoom = d3.zoom()
-    .scaleExtent([0.3, 4])
+    .scaleExtent([0.25, 5])
     .on('zoom', function (event) {
       g.attr('transform', event.transform);
     });
@@ -143,34 +56,13 @@
   // 准备数据（深拷贝以免 D3 修改原始数据）
   var nodes = data.nodes.map(function (n) { return Object.assign({}, n); });
   var links = data.links.map(function (l) { return Object.assign({}, l); });
-  prepareNodeMetrics(nodes, width, connectedSet);
 
   // Force simulation
   var simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(function (d) { return d.id; }).distance(function (d) {
-      var src = typeof d.source === 'object' ? d.source.id : d.source;
-      var tgt = typeof d.target === 'object' ? d.target.id : d.target;
-      return (src === currentNote || tgt === currentNote) ? 96 : 76;
-    }))
-    .force('charge', d3.forceManyBody().strength(function (d) {
-      if (d.id === currentNote) return -520;
-      if (connectedSet.has(d.id)) return -300;
-      return -190;
-    }))
+    .force('link', d3.forceLink(links).id(function (d) { return d.id; }).distance(60))
+    .force('charge', d3.forceManyBody().strength(-120))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(function (d) {
-      return d.collisionRadius;
-    }).iterations(2))
-    .force('x', d3.forceX(width / 2).strength(function (d) {
-      if (d.id === currentNote) return 0.28;
-      if (connectedSet.has(d.id)) return 0.12;
-      return 0.04;
-    }))
-    .force('y', d3.forceY(height / 2).strength(function (d) {
-      if (d.id === currentNote) return 0.22;
-      if (connectedSet.has(d.id)) return 0.1;
-      return 0.04;
-    }));
+    .force('collision', d3.forceCollide().radius(20));
 
   // Links
   var link = g.append('g')
@@ -191,8 +83,27 @@
     })
     .attr('stroke-opacity', 0.6);
 
-  // Track drag to distinguish click vs drag
+  // Track drag distance to distinguish click vs drag
+  var dragStart = null;
   var dragMoved = false;
+
+  function navigateToNode(d) {
+    if (d.id.charAt(0) === '#') {
+      window.location.href = 'tag-' + encodeURI(d.id.substring(1)) + '.html';
+    } else {
+      window.location.href = encodeURI(d.id) + '.html';
+    }
+  }
+
+  function getNodeRadius(d) {
+    if (d.id === currentNote) return 6;
+    if (d.isTag) return 4.2;
+    return 3.4;
+  }
+
+  function getHoverRadius(d) {
+    return getNodeRadius(d) + 1.8;
+  }
 
   // Nodes
   var node = g.append('g')
@@ -202,76 +113,82 @@
     .join('g')
     .attr('cursor', 'pointer')
     .call(d3.drag()
-      .on('start', function (event, d) { dragMoved = false; dragstarted(event, d); })
-      .on('drag', function (event, d) { dragMoved = true; dragged(event, d); })
+      .on('start', function (event, d) {
+        dragStart = [event.x, event.y];
+        dragMoved = false;
+        dragstarted(event, d);
+      })
+      .on('drag', function (event, d) {
+        if (dragStart) {
+          var dx = event.x - dragStart[0];
+          var dy = event.y - dragStart[1];
+          if (Math.sqrt(dx * dx + dy * dy) > 3) dragMoved = true;
+        }
+        dragged(event, d);
+      })
       .on('end', dragended));
+
+  // Increase clickable area around node + label
+  node.append('rect')
+    .attr('x', -10)
+    .attr('y', -12)
+    .attr('width', function (d) { return Math.max(44, String(d.id).length * 8 + 20); })
+    .attr('height', 24)
+    .attr('fill', 'transparent');
 
   // Node circles
   node.append('circle')
-    .attr('r', function (d) { return d.radius; })
+    .attr('r', function (d) { return getNodeRadius(d); })
     .attr('fill', function (d) {
       if (d.id === currentNote) return 'var(--graph-current)';
       if (d.isTag) return 'var(--tag-text, #0969da)';
       if (connectedSet.has(d.id)) return 'var(--graph-node)';
       return 'var(--graph-node-dim)';
     })
-    .attr('stroke', 'var(--bg)')
-    .attr('stroke-width', function (d) { return d.id === currentNote ? 2.5 : 1.5; });
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1);
 
   // Node labels
   node.append('text')
-    .attr('class', 'graph-label')
-    .attr('x', function (d) { return d.labelOffsetX; })
-    .attr('y', 0)
-    .attr('dominant-baseline', 'middle')
-    .attr('font-size', function (d) { return d.fontSize + 'px'; })
+    .text(function (d) { return d.id; })
+    .attr('x', 10)
+    .attr('y', 4)
+    .attr('font-size', function (d) { return d.id === currentNote ? '11px' : '9px'; })
     .attr('fill', function (d) {
       if (d.id === currentNote) return 'var(--graph-current)';
-      if (connectedSet.has(d.id)) return 'var(--text)';
       return 'var(--text-muted)';
     })
-    .attr('font-weight', function (d) { return d.fontWeight; })
+    .attr('font-weight', function (d) { return d.id === currentNote ? '600' : '400'; })
+    .attr('paint-order', 'stroke')
+    .attr('stroke', 'var(--bg)')
+    .attr('stroke-width', 2)
     .each(function (d) {
-      var text = d3.select(this);
-      var offsetY = -((d.labelLines.length - 1) * d.labelLineHeight) / 2;
-      d.labelLines.forEach(function (line, index) {
-        text.append('tspan')
-          .attr('x', d.labelOffsetX)
-          .attr('y', offsetY + index * d.labelLineHeight)
-          .text(line);
-      });
+      d._labelWidth = this.getComputedTextLength();
     });
 
   // Hover effects
   node.on('mouseover', function (event, d) {
     d3.select(this).select('circle')
       .transition().duration(150)
-      .attr('r', d.radius + (d.id === currentNote ? 2 : 1.5));
+      .attr('r', getHoverRadius(d));
     d3.select(this).select('text')
       .transition().duration(150)
-      .attr('fill', 'var(--text)')
-      .attr('font-size', (d.fontSize + 1) + 'px')
+      .attr('font-size', '11px')
       .attr('fill', 'var(--text)');
   }).on('mouseout', function (event, d) {
     d3.select(this).select('circle')
       .transition().duration(150)
-      .attr('r', d.radius);
+      .attr('r', getNodeRadius(d));
     d3.select(this).select('text')
       .transition().duration(150)
-      .attr('font-size', d.fontSize + 'px')
-      .attr('fill', d.id === currentNote
-        ? 'var(--graph-current)'
-        : (connectedSet.has(d.id) ? 'var(--text)' : 'var(--text-muted)'));
+      .attr('font-size', d.id === currentNote ? '11px' : '9px')
+      .attr('fill', d.id === currentNote ? 'var(--graph-current)' : 'var(--text-muted)');
   });
 
   // Click to navigate (only if not dragged)
   node.on('click', function (event, d) {
     if (!dragMoved) {
-      if (d.id.charAt(0) === '#') {
-        window.location.href = 'tag-' + encodeURI(d.id.substring(1)) + '.html';
-      } else {
-        window.location.href = encodeURI(d.id) + '.html';
-      }
+      navigateToNode(d);
     }
   });
 
@@ -299,31 +216,35 @@
   var hasCentered = false;
   function centerOnCurrent() {
     if (hasCentered) return;
-    var focusNodes = getFocusNodes(nodes, connectedSet);
-    if (!focusNodes.length || focusNodes.some(function (n) { return n.x == null || n.y == null; })) return;
-
-    var bounds = getFocusBounds(focusNodes);
-    if (!isFinite(bounds.minX) || !isFinite(bounds.minY)) return;
-
+    var target = nodes.find(function (n) { return n.id === currentNote; });
+    if (!target || target.x == null) return;
     hasCentered = true;
+
     var w = container.getBoundingClientRect().width || width;
     var h = container.getBoundingClientRect().height || height;
-    var padding = Math.max(24, Math.min(w, h) * 0.1);
-    var boundsWidth = Math.max(bounds.maxX - bounds.minX, 1);
-    var boundsHeight = Math.max(bounds.maxY - bounds.minY, 1);
-    var scale = Math.min(2.2, Math.max(0.72, Math.min(
-      (w - padding * 2) / boundsWidth,
-      (h - padding * 2) / boundsHeight
-    )));
 
-    if (focusNodes.length <= 2) {
-      scale = Math.max(scale, 1.25);
-    }
+    // Keep current node and its title visible by fitting a padded box.
+    var r = getNodeRadius(target);
+    var labelOffset = 10;
+    var labelWidth = target._labelWidth || (String(target.id).length * 7);
+    var pad = 16;
 
-    var centerX = (bounds.minX + bounds.maxX) / 2;
-    var centerY = (bounds.minY + bounds.maxY) / 2;
-    var tx = w / 2 - centerX * scale;
-    var ty = h / 2 - centerY * scale;
+    var left = target.x - r - pad;
+    var right = target.x + labelOffset + labelWidth + pad;
+    var top = target.y - 14 - pad;
+    var bottom = target.y + 12 + pad;
+
+    var boxW = Math.max(1, right - left);
+    var boxH = Math.max(1, bottom - top);
+    var scaleX = w / boxW;
+    var scaleY = h / boxH;
+    var scale = Math.min(2.2, Math.max(1, Math.min(scaleX, scaleY) * 0.92));
+
+    var cx = (left + right) / 2;
+    var cy = (top + bottom) / 2;
+    var tx = w / 2 - cx * scale;
+    var ty = h / 2 - cy * scale;
+
     svg.transition().duration(600)
       .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
@@ -344,6 +265,7 @@
     if (!event.active) simulation.alphaTarget(0);
     d.fx = null;
     d.fy = null;
+    dragStart = null;
   }
 
   // 当容器大小变化时调整
@@ -354,13 +276,10 @@
       var h = entry.contentRect.height;
       if (w > 0 && h > 0) {
         svg.attr('viewBox', [0, 0, w, h]);
-        prepareNodeMetrics(nodes, w, connectedSet);
         simulation.force('center', d3.forceCenter(w / 2, h / 2));
-        simulation.force('collision', d3.forceCollide().radius(function (d) {
-          return d.collisionRadius;
-        }).iterations(2));
-        hasCentered = false;
         simulation.alpha(0.3).restart();
+        hasCentered = false;
+        setTimeout(centerOnCurrent, 300);
       }
     }
   });
