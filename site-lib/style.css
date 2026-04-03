@@ -206,9 +206,9 @@ body {
 /* ---------- Body Container (三栏) ---------- */
 .body-container {
   display: grid;
-  grid-template-columns: 260px 1fr 260px;
+  grid-template-columns: 320px minmax(0, 1fr) 260px;
   flex: 1;
-  max-width: 1440px;
+  max-width: 1500px;
   margin: 0 auto;
   width: 100%;
 }
@@ -245,9 +245,11 @@ body {
 }
 
 .nav-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 6px;
+  row-gap: 2px;
+  align-items: start;
   padding: 6px 8px;
   border-radius: 6px;
   color: var(--text);
@@ -266,9 +268,23 @@ body {
   color: var(--accent);
 }
 
-.nav-icon { font-size: 0.9em; flex-shrink: 0; }
-.nav-date { color: var(--text-muted); font-size: 0.82em; white-space: nowrap; flex-shrink: 0; }
-.nav-title { word-break: break-word; }
+.nav-icon {
+  font-size: 0.9em;
+  flex-shrink: 0;
+  grid-row: 1 / span 2;
+  margin-top: 1px;
+}
+.nav-date {
+  color: var(--text-muted);
+  font-size: 0.82em;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.nav-title {
+  min-width: 0;
+  line-height: 1.35;
+  word-break: break-word;
+}
 
 /* ---------- Content ---------- */
 .content {
@@ -593,7 +609,7 @@ body.reading-mode .content { max-width: 780px; margin: 0 auto; }
 
 /* Tablet: 隐藏右侧边栏，显示移动版图谱 */
 @media (max-width: 1100px) {
-  .body-container { grid-template-columns: 240px 1fr; }
+  .body-container { grid-template-columns: 300px minmax(0, 1fr); }
   .sidebar-right { display: none; }
   .content { padding: 32px 36px 60px; }
   .mobile-graph { display: block; margin-top: 2em; padding-top: 1.5em; border-top: 1px solid var(--border); }
@@ -607,7 +623,7 @@ body.reading-mode .content { max-width: 780px; margin: 0 auto; }
     position: fixed;
     top: 56px;
     left: 0;
-    width: 280px;
+    width: 320px;
     height: calc(100vh - 56px);
     z-index: 90;
     box-shadow: var(--shadow-lg);

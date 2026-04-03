@@ -130,11 +130,14 @@ function toggleSidebar() {
   var touchStartX = 0;
   var touchStartY = 0;
   var touchStartTime = 0;
-  var edgeWidth = 25; // px from left edge to trigger
   var minSwipeDist = 50;
   var maxSwipeTime = 400; // ms
   var isEdgeSwipe = false;
   var isSidebarSwipe = false;
+
+  function getEdgeSwipeWidth() {
+    return Math.max(25, Math.floor(window.innerWidth / 3));
+  }
 
   document.addEventListener('touchstart', function(e) {
     var touch = e.touches[0];
@@ -143,7 +146,7 @@ function toggleSidebar() {
     touchStartTime = Date.now();
 
     var sb = document.getElementById('sidebar-left');
-    isEdgeSwipe = (touchStartX <= edgeWidth && !sb.classList.contains('open'));
+    isEdgeSwipe = (touchStartX <= getEdgeSwipeWidth() && !sb.classList.contains('open'));
     isSidebarSwipe = sb.classList.contains('open');
   }, { passive: true });
 
