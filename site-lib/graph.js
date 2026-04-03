@@ -47,7 +47,7 @@
 
   // Zoom
   var zoom = d3.zoom()
-    .scaleExtent([0.25, 5])
+    .scaleExtent([0.2, 5])
     .on('zoom', function (event) {
       g.attr('transform', event.transform);
     });
@@ -230,14 +230,12 @@
     if (hasCentered) return;
     var target = nodes.find(function (n) { return n.id === currentNote; });
     if (!target || target.x == null) return;
-    hasCentered = true;
-
     var w = container.getBoundingClientRect().width || width;
     var h = container.getBoundingClientRect().height || height;
 
-    // Fit current node + one-hop neighbors so labels are less likely to be clipped.
+    // Fit all nodes + labels so both circles and titles are visible.
     var focusNodes = nodes.filter(function (n) {
-      return n.id === currentNote || connectedSet.has(n.id);
+      return n.x != null && n.y != null;
     });
     if (focusNodes.length === 0) focusNodes = [target];
 
@@ -262,8 +260,8 @@
       bottom = fallback.bottom;
     }
 
-    var padX = Math.max(24, w * 0.08);
-    var padY = Math.max(20, h * 0.08);
+    var padX = Math.max(28, w * 0.1);
+    var padY = Math.max(24, h * 0.1);
     left -= padX;
     right += padX;
     top -= padY;
@@ -273,12 +271,14 @@
     var boxH = Math.max(1, bottom - top);
     var scaleX = w / boxW;
     var scaleY = h / boxH;
-    var scale = Math.min(2.0, Math.max(0.55, Math.min(scaleX, scaleY)));
+    var scale = Math.min(1.8, Math.max(0.2, Math.min(scaleX, scaleY) * 0.96));
 
     var cx = (left + right) / 2;
     var cy = (top + bottom) / 2;
     var tx = w / 2 - cx * scale;
     var ty = h / 2 - cy * scale;
+
+    hasCentered = true;
 
     svg.transition().duration(600)
       .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
