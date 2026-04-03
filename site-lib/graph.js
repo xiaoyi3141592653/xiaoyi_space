@@ -144,6 +144,35 @@
     };
   }
 
+  function getSoftVisibleBox(d) {
+    var r = getNodeRadius(d);
+    var labelOffset = 10;
+    var labelWidth = Math.min(d._labelWidth || (String(d.id).length * 7), 110);
+    return {
+      left: d.x - r - 10,
+      right: d.x + labelOffset + labelWidth + 10,
+      top: d.y - 16,
+      bottom: d.y + 14
+    };
+  }
+
+  function mergeBounds(acc, box) {
+    if (!box) return acc;
+    if (!acc) {
+      return {
+        left: box.left,
+        right: box.right,
+        top: box.top,
+        bottom: box.bottom
+      };
+    }
+    acc.left = Math.min(acc.left, box.left);
+    acc.right = Math.max(acc.right, box.right);
+    acc.top = Math.min(acc.top, box.top);
+    acc.bottom = Math.max(acc.bottom, box.bottom);
+    return acc;
+  }
+
   // Nodes
   var node = g.append('g')
     .attr('class', 'graph-nodes')
@@ -260,7 +289,7 @@
     var w = container.getBoundingClientRect().width || width;
     var h = container.getBoundingClientRect().height || height;
 
-    // Priority: current note circle + full title must be visible, then try to include two-hop nodes.
+    // Priority: current note circle + full title must be visible, while two-hop nodes stay in frame if possible.
     var currentBox = getLabelBox(target);
     var titlePadX = Math.max(20, w * 0.05);
     var titlePadY = Math.max(16, h * 0.06);
@@ -273,13 +302,34 @@
     var titleBoxH = Math.max(1, titleBottom - titleTop);
     var titleFitScale = Math.min(w / titleBoxW, h / titleBoxH);
 
-    // A little larger than "full fit" feel, while keeping current title fully visible.
-    var scale = Math.min(2.35, Math.max(0.35, titleFitScale * 0.98));
-
     var twoHopIds = collectTwoHopIds();
     var twoHopNodes = nodes.filter(function (n) {
-      return twoHopIds.has(n.id) && n.x != null && n.y != null;
+      return n.id !== currentNote && twoHopIds.has(n.id) && n.x != null && n.y != null;
     });
+
+    var focusBounds = {
+      left: titleLeft,
+      right: titleRight,
+      top: titleTop,
+      bottom: titleBottom
+    };
+    twoHopNodes.forEach(function (n) {
+      focusBounds = mergeBounds(focusBounds, getSoftVisibleBox(n));
+    });
+
+    var focusPadX = Math.max(14, w * 0.035);
+    var focusPadY = Math.max(12, h * 0.04);
+    focusBounds.left -= focusPadX;
+    focusBounds.right += focusPadX;
+    focusBounds.top -= focusPadY;
+    focusBounds.bottom += focusPadY;
+
+    var focusBoxW = Math.max(1, focusBounds.right - focusBounds.left);
+    var focusBoxH = Math.max(1, focusBounds.bottom - focusBounds.top);
+    var focusFitScale = Math.min(w / focusBoxW, h / focusBoxH);
+
+    // Keep the current title fully visible, but let two-hop nodes cap the zoom if needed.
+    var scale = Math.min(2.25, Math.max(0.4, Math.min(titleFitScale, focusFitScale) * 0.98));
 
     var avgY = target.y;
     if (twoHopNodes.length > 0) {
@@ -289,16 +339,16 @@
     }
 
     // Bias current node to the left so the right-side title has more room.
-    var desiredX = w * 0.30;
-    var desiredY = h * 0.5 + (target.y - avgY) * scale * 0.18;
+    var desiredX = w * 0.32;
+    var desiredY = h * 0.5 + (target.y - avgY) * scale * 0.14;
     var tx = desiredX - target.x * scale;
     var ty = desiredY - target.y * scale;
 
-    // Clamp translation to guarantee the current title box stays fully inside viewport.
-    var minTx = w - titleRight * scale;
-    var maxTx = -titleLeft * scale;
-    var minTy = h - titleBottom * scale;
-    var maxTy = -titleTop * scale;
+    // Clamp translation to keep both the current title and two-hop nodes inside viewport.
+    var minTx = w - focusBounds.right * scale;
+    var maxTx = -focusBounds.left * scale;
+    var minTy = h - focusBounds.bottom * scale;
+    var maxTy = -focusBounds.top * scale;
     tx = Math.min(maxTx, Math.max(minTx, tx));
     ty = Math.min(maxTy, Math.max(minTy, ty));
 
