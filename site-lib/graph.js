@@ -63,10 +63,10 @@
 
   // Force simulation
   var simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(function (d) { return d.id; }).distance(60))
-    .force('charge', d3.forceManyBody().strength(-120))
+    .force('link', d3.forceLink(links).id(function (d) { return d.id; }).distance(140))
+    .force('charge', d3.forceManyBody().strength(-260))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(20));
+    .force('collision', d3.forceCollide().radius(36));
 
   // Links
   var link = g.append('g')
@@ -100,9 +100,9 @@
   }
 
   function getNodeRadius(d) {
-    if (d.id === currentNote) return 6;
-    if (d.isTag) return 4.2;
-    return 3.4;
+    if (d.id === currentNote) return 15;
+    if (d.isTag) return 8;
+    return 7;
   }
 
   function getHoverRadius(d) {
@@ -177,11 +177,21 @@
     return acc;
   }
 
+  // Sort nodes: tags first (bottom), normal notes, current note last (top)
+  var sortedNodes = nodes.slice().sort(function (a, b) {
+    var rank = function (d) {
+      if (d.id === currentNote) return 2;
+      if (d.isTag) return 0;
+      return 1;
+    };
+    return rank(a) - rank(b);
+  });
+
   // Nodes
   var node = g.append('g')
     .attr('class', 'graph-nodes')
     .selectAll('g')
-    .data(nodes)
+    .data(sortedNodes)
     .join('g')
     .attr('cursor', 'pointer')
     .call(d3.drag()
@@ -225,7 +235,7 @@
     .text(function (d) { return d.id; })
     .attr('x', 10)
     .attr('y', 4)
-    .attr('font-size', function (d) { return d.id === currentNote ? '11px' : '9px'; })
+    .attr('font-size', function (d) { return d.id === currentNote ? '24px' : '18px'; })
     .attr('fill', function (d) {
       if (d.id === currentNote) return 'var(--graph-current)';
       return 'var(--text-muted)';
@@ -245,7 +255,7 @@
       .attr('r', getHoverRadius(d));
     d3.select(this).select('text')
       .transition().duration(150)
-      .attr('font-size', '11px')
+      .attr('font-size', '22px')
       .attr('fill', 'var(--text)');
   }).on('mouseout', function (event, d) {
     d3.select(this).select('circle')
@@ -253,7 +263,7 @@
       .attr('r', getNodeRadius(d));
     d3.select(this).select('text')
       .transition().duration(150)
-      .attr('font-size', d.id === currentNote ? '11px' : '9px')
+      .attr('font-size', d.id === currentNote ? '24px' : '18px')
       .attr('fill', d.id === currentNote ? 'var(--graph-current)' : 'var(--text-muted)');
   });
 
@@ -298,68 +308,44 @@
     var w = container.getBoundingClientRect().width || width;
     var h = container.getBoundingClientRect().height || height;
 
-    // Priority: current note circle + full title must be visible, while two-hop nodes stay in frame if possible.
-    var currentBox = getLabelBox(target);
-    var titlePadX = Math.max(20, w * 0.05);
-    var titlePadY = Math.max(16, h * 0.06);
-    var titleLeft = currentBox.left - titlePadX;
-    var titleRight = currentBox.right + titlePadX;
-    var titleTop = currentBox.top - titlePadY;
-    var titleBottom = currentBox.bottom + titlePadY;
+    // Collect one-hop neighbors (including current)
+    var visibleNodes = nodes.filter(function (n) {
+      return connectedSet.has(n.id) && n.x != null && n.y != null;
+    });
+    if (visibleNodes.length === 0) visibleNodes = [target];
 
-    var titleBoxW = Math.max(1, titleRight - titleLeft);
-    var titleBoxH = Math.max(1, titleBottom - titleTop);
-    var titleFitScale = Math.min(w / titleBoxW, h / titleBoxH);
-
-    var twoHopIds = collectTwoHopIds();
-    var twoHopNodes = nodes.filter(function (n) {
-      return n.id !== currentNote && twoHopIds.has(n.id) && n.x != null && n.y != null;
+    // Bounding box of one-hop nodes including their labels
+    var allBounds = null;
+    visibleNodes.forEach(function (n) {
+      allBounds = mergeBounds(allBounds, getLabelBox(n));
     });
 
-    var focusBounds = {
-      left: titleLeft,
-      right: titleRight,
-      top: titleTop,
-      bottom: titleBottom
-    };
-    twoHopNodes.forEach(function (n) {
-      focusBounds = mergeBounds(focusBounds, getSoftVisibleBox(n));
-    });
+    var pad = Math.max(18, Math.min(w, h) * 0.07);
+    allBounds.left -= pad;
+    allBounds.right += pad;
+    allBounds.top -= pad;
+    allBounds.bottom += pad;
 
-    var focusPadX = Math.max(14, w * 0.035);
-    var focusPadY = Math.max(12, h * 0.04);
-    focusBounds.left -= focusPadX;
-    focusBounds.right += focusPadX;
-    focusBounds.top -= focusPadY;
-    focusBounds.bottom += focusPadY;
+    var allW = Math.max(1, allBounds.right - allBounds.left);
+    var allH = Math.max(1, allBounds.bottom - allBounds.top);
+    var fitScale = Math.min(w / allW, h / allH);
+    var scale = Math.min(4.8, Math.max(0.3, fitScale));
 
-    var focusBoxW = Math.max(1, focusBounds.right - focusBounds.left);
-    var focusBoxH = Math.max(1, focusBounds.bottom - focusBounds.top);
-    var focusFitScale = Math.min(w / focusBoxW, h / focusBoxH);
+    // Center viewport on current node
+    var tx = w / 2 - target.x * scale;
+    var ty = h / 2 - target.y * scale;
 
-    // Keep the current title fully visible, but let two-hop nodes cap the zoom if needed.
-    var scale = Math.min(2.25, Math.max(0.4, Math.min(titleFitScale, focusFitScale) * 0.98));
-
-    var avgY = target.y;
-    if (twoHopNodes.length > 0) {
-      var sumY = 0;
-      twoHopNodes.forEach(function (n) { sumY += n.y; });
-      avgY = sumY / twoHopNodes.length;
+    // Soft-clamp: keep one-hop bounding box inside viewport when possible
+    var minTx = w - allBounds.right * scale;
+    var maxTx = -allBounds.left * scale;
+    var minTy = h - allBounds.bottom * scale;
+    var maxTy = -allBounds.top * scale;
+    if (minTx < maxTx) {
+      tx = Math.min(maxTx, Math.max(minTx, tx));
     }
-
-    // Bias current node to the left so the right-side title has more room.
-    var desiredX = w * 0.32;
-    var desiredY = h * 0.5 + (target.y - avgY) * scale * 0.14;
-    var tx = desiredX - target.x * scale;
-    var ty = desiredY - target.y * scale;
-
-    // Clamp translation to keep both the current title and two-hop nodes inside viewport.
-    var minTx = w - focusBounds.right * scale;
-    var maxTx = -focusBounds.left * scale;
-    var minTy = h - focusBounds.bottom * scale;
-    var maxTy = -focusBounds.top * scale;
-    tx = Math.min(maxTx, Math.max(minTx, tx));
-    ty = Math.min(maxTy, Math.max(minTy, ty));
+    if (minTy < maxTy) {
+      ty = Math.min(maxTy, Math.max(minTy, ty));
+    }
 
     var transform = d3.zoomIdentity.translate(tx, ty).scale(scale);
     svg.interrupt();
